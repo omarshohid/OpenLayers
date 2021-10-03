@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Advanced View Positioning</title>
+    <link rel="stylesheet" href="https://openlayers.org/en/v3.20.1/css/ol.css" type="text/css">
+    <!-- The line below is only needed for old environments like Internet Explorer and Android 4.x -->
+    <script src="https://cdn.polyfill.io/v2/polyfill.min.js?features=requestAnimationFrame,Element.prototype.classList,URL"></script>
+    <script src="https://openlayers.org/en/v3.20.1/build/ol.js"></script>
+    <style>
+        .mapcontainer {
+            position: relative;
+            margin-bottom: 20px;
+        }
+        
+        .map {
+            width: 1000px;
+            height: 600px;
+        }
+        
+        div.ol-zoom {
+            top: 178px;
+            left: 158px;
+        }
+        
+        div.ol-attribution {
+            bottom: 30px;
+            right: 50px;
+        }
+        
+        .padding-top {
+            position: absolute;
+            top: 0;
+            left: 0px;
+            width: 1000px;
+            height: 170px;
+            background: rgba(255, 255, 255, 0.5);
+        }
+        
+        .padding-left {
+            position: absolute;
+            top: 170px;
+            left: 0;
+            width: 150px;
+            height: 400px;
+            background: rgba(255, 255, 255, 0.5);
+        }
+        
+        .padding-right {
+            position: absolute;
+            top: 170px;
+            left: 950px;
+            width: 50px;
+            height: 400px;
+            background: rgba(255, 255, 255, 0.5);
+        }
+        
+        .padding-bottom {
+            position: absolute;
+            top: 570px;
+            left: 0px;
+            width: 1000px;
+            height: 30px;
+            background: rgba(255, 255, 255, 0.5);
+        }
+        
+        .center {
+            position: absolute;
+            border: solid 1px black;
+            top: 490px;
+            left: 560px;
+            width: 20px;
+            height: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="mapcontainer">
+        <div id="map" class="map"></div>
+        <div class="padding-top"></div>
+        <div class="padding-left"></div>
+        <div class="padding-right"></div>
+        <div class="padding-bottom"></div>
+        <div class="center"></div>
+    </div>
+    <button id="zoomtoswitzerlandbest">Zoom to Switzerland</button> (best fit),<br/>
+    <button id="zoomtoswitzerlandconstrained">Zoom to Switzerland</button> (respect resolution constraint).<br/>
+    <button id="zoomtoswitzerlandnearest">Zoom to Switzerland</button> (nearest),<br/>
+    <button id="zoomtolausanne">Zoom to Lausanne</button> (with min resolution),<br/>
+    <button id="centerlausanne">Center on Lausanne</button>
+    <script>
+        var source = new ol.source.Vector({
+            url: 'https://openlayers.org/en/v3.20.1/examples/data/geojson/switzerland.geojson',
+            format: new ol.format.GeoJSON()
+        });
+
+
+        // A bounce easing method (from https://github.com/DmitryBaranovskiy/raphael).
+        function bounce(t) {
+            var s = 7.5625,
+                p = 2.75,
+                l;
+            if (t < (1 / p)) {
+                l = s * t * t;
+            } else {
+                if (t < (2 / p)) {
+                    t -= (1.5 / p);
+                    l = s * t * t + 0.75;
+                } else {
+                    if (t < (2.5 / p)) {
+                        t -= (2.25 / p);
+                        l = s * t * t + 0.9375;
+                    } else {
+                        t -= (2.625 / p);
+                        l = s * t * t + 0.984375;
+                    }
+                }
+            }
+            return l;
+        }
+
+        // An elastic easing method (from https://github.com/DmitryBaranovskiy/raphael).
+        function elastic(t) {
+            return Math.pow(2, -10 * t) * Math.sin((t - 0.075) * (2 * Math.PI) / 0.3) + 1;
+        }
+
+        function flyTo(location, done) {
+            var duration = 2000;
+            var zoom = view.getZoom();
+            var parts = 2;
+            var called = false;
+
+            function callback(complete) {
+                --parts;
+                if (called) {
+                    return;
+                }
+                if (parts === 0 || !complete) {
+                    called = true;
+                    done(complete);
+                }
+            }
+            view.animate({
+                center: location,
+                duration: duration
+            }, callback);
+            view.animate({
+                zoom: zoom - 1,
+                duration: duration / 2
+            }, {
+                zoom: zoom,
+                duration: duration / 2
+            }, callback);
+        }
+
+        var style = new ol.style.Style({
+            fill: new ol.style.Fill({
+                color: 'rgba(255, 255, 255, 0.6)'
+            }),
+            stroke: new ol.style.Stroke({
+                color: '#319FD3',
+                width: 1
+            }),
+            image: new ol.style.Circle({
+                radius: 5,
+                fill: new ol.style.Fill({
+                    color: 'rgba(255, 255, 255, 0.6)'
+                }),
+                stroke: new ol.style.Stroke({
+                    color: '#319FD3',
+                    width: 1
+                })
+            })
+        });
+        var vectorLayer = new ol.layer.Vector({
+            source: source,
+            style: style
+        });
+        var view = new ol.View({
+            center: [0, 0],
+            zoom: 1
+        });
+        var map = new ol.Map({
+            layers: [
+                new ol.layer.Tile({
+                    source: new ol.source.OSM()
+                }),
+                vectorLayer
+            ],
+            target: 'map',
+            controls: ol.control.defaults({
+                attributionOptions: /** @type {olx.control.AttributionOptions} */ ({
+                    collapsible: false
+                })
+            }),
+            view: view
+        });
+
+        var zoomtoswitzerlandbest = document.getElementById('zoomtoswitzerlandbest');
+        zoomtoswitzerlandbest.addEventListener('click', function() {
+            var feature = source.getFeatures()[0];
+            var polygon = /** @type {ol.geom.SimpleGeometry} */ (feature.getGeometry());
+            var size = /** @type {ol.Size} */ (map.getSize());
+
+            view.fit(polygon, size, {
+                padding: [170, 50, 30, 150],
+                constrainResolution: false,
+                duration: 2000,
+            });
+
+        }, false);
+
+        var zoomtoswitzerlandconstrained =
+            document.getElementById('zoomtoswitzerlandconstrained');
+        zoomtoswitzerlandconstrained.addEventListener('click', function() {
+            var feature = source.getFeatures()[0];
+            var polygon = /** @type {ol.geom.SimpleGeometry} */ (feature.getGeometry());
+            var size = /** @type {ol.Size} */ (map.getSize());
+
+            view.fit(polygon, size, {
+                padding: [170, 50, 30, 150],
+                duration: 2000,
+                // easing: elastic
+            });
+
+        }, false);
+
+        var zoomtoswitzerlandnearest =
+            document.getElementById('zoomtoswitzerlandnearest');
+        zoomtoswitzerlandnearest.addEventListener('click', function() {
+            var feature = source.getFeatures()[0];
+            var polygon = /** @type {ol.geom.SimpleGeometry} */ (feature.getGeometry());
+            var size = /** @type {ol.Size} */ (map.getSize());
+            view.fit(polygon, size, {
+                padding: [170, 50, 30, 150],
+                nearest: true,
+                //easing: elastic
+            });
+        }, false);
+
+        var zoomtolausanne = document.getElementById('zoomtolausanne');
+        zoomtolausanne.addEventListener('click', function() {
+            var feature = source.getFeatures()[1];
+            var point = /** @type {ol.geom.SimpleGeometry} */ (feature.getGeometry());
+            var size = /** @type {ol.Size} */ (map.getSize());
+            view.fit(point, size, {
+                padding: [170, 50, 30, 150],
+                minResolution: 50
+            });
+        }, false);
+
+        var centerlausanne = document.getElementById('centerlausanne');
+        centerlausanne.addEventListener('click', function() {
+            var feature = source.getFeatures()[1];
+            var point = /** @type {ol.geom.Point} */ (feature.getGeometry());
+            var size = /** @type {ol.Size} */ (map.getSize());
+            view.centerOn(point.getCoordinates(), size, [570, 500]);
+        }, false);
+    </script>
+</body>
+
+</html>
